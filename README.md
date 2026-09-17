@@ -27,6 +27,7 @@ https://github.com/user-attachments/assets/cec7b7a6-953b-4fa4-8f1a-47efc1fce547
   - [Installation](#installation)
   - [attn_mode Configuration](#️-important-attn_mode-configuration)
   - [Deploying LingBot-VA for Inference](#deploying-lingbot-va-for-inference)
+    - [Tanveer's Standalone Inference](#tanveers-standalone-inference)
     - [Evaluation on RoboTwin-2.0](#evaluation-on-robotwin-20)
     - [Evaluation on LIBERO](#evaluation-on-libero)
     - [Run Image to Video-Action Generation](#run-image-to-video-action-generation)
@@ -113,11 +114,41 @@ pip install flash-attn --no-build-isolation
 ## Deploying LingBot-VA for Inference
 LingBot-VA supports both standalone execution and Server-Client architecture which separates the model environment from simulation. By isolating dependencies, the design avoids package clashes and supports distributed inference on GPUs, clusters, and other devices.
 
-<!-- ### Standalone  Inference
-```python
-python inference.py
-```
-This processes the example data from `examples/0/` and saves visualizations to `result/`. -->
+### Tanveer's Standalone Inference
+
+For a quick single-GPU sanity check with no simulator (RoboTwin/LIBERO) required, you can run image-to-video-action generation directly on the bundled example image using the `demo_i2av` config:
+
+1. Create environment:
+    ```bash
+    salloc --partition=gb200nvl72_preprod --nodes=1 --gres=gpu:1 --time=08:00:00 srun --pty --overlap bash
+    srun --pty --overlap --jobid 2190458 bash
+    conda create -n lingbot-va python=3.10.16 -y
+    conda activate lingbot-va
+    pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126
+    pip install websockets einops diffusers==0.36.0 transformers==4.55.2 accelerate msgpack opencv-python matplotlib ftfy easydict
+    ```
+> **⚠️ Blackwell / GB200 GPUs**: The `cu126` PyTorch wheel above does not include `sm_100` kernels and will fail at runtime with `CUDA error: no kernel image is available for execution on the device` on GB200/Blackwell hardware. Use the `cu128` index instead:
+> ```bash
+> pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu128
+> ```
+
+2. Download a checkpoint, e.g. `lingbot-va-base`:
+    ```bash
+    hf download robbyant/lingbot-va-base --local-dir /home/thannan/scratch/robotics/model/lingbot-va-base
+    ```
+
+3. Set `va_demo_cfg.wan22_pretrained_model_name_or_path` in [`wan_va/configs/va_demo_cfg.py`](wan_va/configs/va_demo_cfg.py) to `/home/thannan/scratch/robotics/model/lingbot-va-base`.
+
+4. Open `/home/thannan/scratch/robotics/model/lingbot-va-base/transformer/config.json` and set `attn_mode` to `"torch"` or `"flashattn"` (see [attn_mode Configuration](#️-important-attn_mode-configuration)).
+
+5. Run:
+   ```bash
+   NGPU=1 CONFIG_NAME='demo_i2av' bash script/run_launch_va_server_sync.sh
+   ```
+
+This loads the observation images from [`example/demo/`](example/demo), runs the prompt configured in `va_demo_i2va_cfg.prompt` ("Pick the green cube and place it inside the blue box" by default), and saves the generated rollout to `demo.mp4` under the config's `save_root` (`./train_out` by default). There is no client/server loop and no environment dependency — this mode calls the model once and exits.
+
+A Franka-camera variant is also available via `CONFIG_NAME='franka_i2av'`, which reads from [`example/franka/`](example/franka) instead.
 
 ### Evaluation on RoboTwin-2.0
 
