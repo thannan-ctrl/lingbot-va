@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+import hashlib
 import time
 from functools import partial
 from PIL import Image
@@ -435,7 +436,8 @@ class VA_Server:
                 dtype=self.dtype,
             )
 
-        self.exp_name = f"{prompt}_{time.strftime('%Y%m%d_%H%M%S')}" if prompt else "default"
+        prompt_slug = hashlib.md5(prompt.encode()).hexdigest()[:8] if prompt else None
+        self.exp_name = f"{prompt_slug}_{time.strftime('%Y%m%d_%H%M%S')}" if prompt else "default"
         self.exp_save_root = os.path.join(self.save_root, 'real', self.exp_name)
         os.makedirs(self.exp_save_root, exist_ok=True)
         torch.cuda.empty_cache()
